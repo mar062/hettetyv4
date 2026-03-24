@@ -510,7 +510,7 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
   // Initialize Chat
   useEffect(() => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (apiKey) {
         const ai = new GoogleGenAI({ apiKey });
         chatRef.current = ai.chats.create({
@@ -1517,8 +1517,12 @@ export default function App() {
     
     setIsAiSearching(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("API Key missing");
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn("VITE_GEMINI_API_KEY is missing. AI search will not work.");
+        setAiFilteredIds(null);
+        return;
+      }
       const ai = new GoogleGenAI({ apiKey });
       
       const prompt = `

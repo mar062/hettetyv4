@@ -240,6 +240,8 @@ const AuthForm = ({ type, onSwitch, onSubmit, t, isRtl }: { type: 'login' | 'reg
         } catch (err: any) {
           if (err.code === 'auth/user-not-found') {
             setError(isRtl ? 'هذا الحساب غير موجود، يرجى التسجيل أولاً' : 'This account does not exist. Please register first.');
+          } else if (err.code === 'auth/unauthorized-domain') {
+            setError(isRtl ? 'نطاق غير مصرح به. يرجى إضافة هذا النطاق في إعدادات Firebase.' : 'Unauthorized domain. Please add this domain in Firebase settings.');
           } else {
             setError(err.message);
           }
@@ -265,6 +267,8 @@ const AuthForm = ({ type, onSwitch, onSubmit, t, isRtl }: { type: 'login' | 'reg
     } catch (err: any) {
       if (err.code === 'auth/operation-not-allowed') {
         setError(isRtl ? 'يرجى تفعيل تسجيل الدخول بالبريد الإلكتروني في لوحة تحكم Firebase.' : 'Please enable Email/Password authentication in the Firebase Console.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError(isRtl ? 'نطاق غير مصرح به. يرجى إضافة هذا النطاق في إعدادات Firebase.' : 'Unauthorized domain. Please add this domain in Firebase settings.');
       } else {
         setError(err.message);
       }

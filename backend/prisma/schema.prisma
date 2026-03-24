@@ -1,0 +1,209 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector] // Enable pgvector for AI recommendations
+}
+
+enum Role {
+  USER
+  AGENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum PropertyType {
+  APARTMENT
+  VILLA
+  TOWNHOUSE
+  COMMERCIAL
+  LAND
+}
+
+enum PropertyStatus {
+  AVAILABLE
+  SOLD
+  RENTED
+  PENDING
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String    @unique
+  phone              String?
+  passwordHash       String
+  role               Role      @default(USER)
+  isVerified         Boolean   @default(false)
+  verificationToken  String?
+  refreshToken       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  agentProfile       AgentProfile?
+  properties         Property[]       @relation("AgentProperties")
+  favorites          Favorite[]
+  reviews            Review[]
+  sentMessages       ChatMessage[]    @relation("SentMessages")
+  receivedMessages   ChatMessage[]    @relation("ReceivedMessages")
+  notifications      Notification[]
+  aiLogs             AIRecommendationLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model AgentProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber  String?
+  bio            String?
+  rating         Float    @default(0.0)
+  totalReviews   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Property {
+  id             String         @id @default(uuid())
+  title          String
+  description    String
+  price          Decimal        @db.Decimal(12, 2)
+  type           PropertyType
+  status         PropertyStatus @default(AVAILABLE)
+  size           Float          // in square meters
+  bedrooms       Int
+  bathrooms      Int
+  amenities      String[]       // Array of amenities
+  embedding      Unsupported("vector(1536)")? // OpenAI embedding for vector search
+  
+  agentId        String
+  agent          User           @relation("AgentProperties", fields: [agentId], references: [id])
+  
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  location       PropertyLocation?
+  images         PropertyImage[]
+  priceHistory   PriceHistory[]
+  favorites      Favorite[]
+  reviews        Review[]
+
+  @@index([agentId])
+  @@index([price])
+  @@index([type])
+  @@index([status])
+}
+
+model PropertyLocation {
+  id          String   @id @default(uuid())
+  propertyId  String   @unique
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  address     String
+  city        String
+  state       String
+  country     String
+  zipCode     String?
+  latitude    Float
+  longitude   Float
+
+  @@index([city, state])
+  @@index([latitude, longitude])
+}
+
+model PropertyImage {
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url         String
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([propertyId])
+}
+
+model PriceHistory {
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  oldPrice    Decimal  @db.Decimal(12, 2)
+  newPrice    Decimal  @db.Decimal(12, 2)
+  changedAt   DateTime @default(now())
+
+  @@index([propertyId])
+}
+
+model Favorite {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, propertyId])
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  rating      Int      @db.SmallInt // 1 to 5
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  @@index([propertyId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  senderId    String
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([senderId, receiverId])
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        String   // e.g., 'PRICE_DROP', 'NEW_MESSAGE'
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AIRecommendationLog {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actionType      String   // e.g., 'VIEW', 'SEARCH', 'FAVORITE'
+  propertyId      String?  // Optional, if action is tied to a specific property
+  searchQuery     String?
+  vectorEmbedding Unsupported("vector(1536)")? // Embedding of the user's search/action context
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([actionType])
+}

@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - name: string (optional) - Full name
+    //   - email: string (required) - Email address
+    //   - phone: string (optional) - Phone number
+    //   - role: string (required, enum: ['user', 'admin']) - User role
+    //   - preferences: string (optional) - User property preferences
+    //   - createdAt: timestamp (optional) - Account creation timestamp
+    //
+    // Collection: properties
+    // Document ID: propertyId
+    // Fields:
+    //   - id: string (optional) - Property ID
+    //   - title: string (required) - Property title
+    //   - price: number (required) - Property price
+    //   - location: string (required) - Property location
+    //   - bedrooms: number (optional) - Number of bedrooms
+    //   - bathrooms: number (optional) - Number of bathrooms
+    //   - area: number (optional) - Area in sqm
+    //   - imageUrl: string (optional) - Image URL
+    //   - status: string (required, enum: ['For Sale', 'For Rent']) - Property status
+    //   - isVerified: bool (optional) - Whether the property is verified
+    //   - paymentMethods: list (optional) - List of payment methods
+    //   - authorUid: string (optional) - UID of the user who created the listing
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         isSuperAdmin());
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "marwaneltaweel0@gmail.com" ||
+         request.auth.token.email == "abdallahahmedpilot2426@gmail.com");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['user', 'admin'];
+    }
+
+    function isValidProperty(data) {
+      return data.keys().hasAll(['title', 'price', 'location', 'status']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.price is number && data.price >= 0 &&
+             data.location is string && data.location.size() > 0 &&
+             data.status in ['For Sale', 'For Rent'];
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin())) || 
+                    (isSuperAdmin() && isValidUser(request.resource.data));
+    }
+
+    match /properties/{propertyId} {
+      allow read, list: if true;
+      allow create: if isAdmin() && isValidProperty(request.resource.data);
+      allow update: if isAdmin() && isValidProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

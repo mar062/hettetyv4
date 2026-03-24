@@ -510,7 +510,8 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
   // Initialize Chat
   useEffect(() => {
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      // @ts-ignore
+      const apiKey = process.env.GEMINI_API_KEY;
       if (apiKey) {
         const ai = new GoogleGenAI({ apiKey });
         chatRef.current = ai.chats.create({
@@ -530,6 +531,8 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
             5. Encourage users to book a 3D tour if they are interested in a property.`,
           }
         });
+      } else {
+        console.error("No API key found for Gemini");
       }
     } catch (e) {
       console.error("Failed to initialize AI chat", e);
@@ -1516,9 +1519,10 @@ export default function App() {
     
     setIsAiSearching(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      // @ts-ignore
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn("VITE_GEMINI_API_KEY is missing. AI search will not work.");
+        console.warn("GEMINI_API_KEY is missing. AI search will not work.");
         setAiFilteredIds(null);
         return;
       }

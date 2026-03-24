@@ -562,18 +562,17 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
 
     try {
       if (chatRef.current) {
-        let response;
         try {
-          response = await chatRef.current.sendMessage({ message: userMsg.text });
+          const response = await chatRef.current.sendMessage({ message: userMsg.text });
+          const text = response.text;
+          if (text) {
+            setMessages(prev => [...prev, { role: 'model', text: text, timestamp: new Date() }]);
+          } else {
+            throw new Error("Empty response from AI");
+          }
         } catch (apiError) {
           console.error("API Error:", apiError);
-          throw new Error("API call failed");
-        }
-        
-        if (response && response.text) {
-          setMessages(prev => [...prev, { role: 'model', text: response.text, timestamp: new Date() }]);
-        } else {
-          throw new Error("Empty response");
+          throw apiError;
         }
       } else {
         // Fallback to mock API if no API key
@@ -585,8 +584,8 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
         }
       }
     } catch (error) {
-      console.error(error);
-      setMessages(prev => [...prev, { role: 'model', text: isRtl ? "عذراً، أواجه مشكلة في الاتصال حالياً. يرجى التأكد من إعداد مفتاح API الخاص بك بشكل صحيح." : "I'm having trouble connecting right now. Please ensure your API key is set up correctly.", timestamp: new Date() }]);
+      console.error("Chat error:", error);
+      setMessages(prev => [...prev, { role: 'model', text: isRtl ? "عذراً، أواجه مشكلة في الاتصال حالياً. يرجى المحاولة مرة أخرى لاحقاً." : "I'm having trouble connecting right now. Please try again later.", timestamp: new Date() }]);
     }
     
     setIsLoading(false);
@@ -1545,7 +1544,8 @@ export default function App() {
         }
       });
 
-      const ids = JSON.parse(response.text || "[]");
+      const text = response.text;
+      const ids = JSON.parse(text || "[]");
       setAiFilteredIds(ids);
     } catch (err) {
       console.error("AI Search Error:", err);

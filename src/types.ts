@@ -45,4 +45,5 @@ export interface UserDocument {
   uploadDate: string;
   accessStatus?: 'Locked' | 'Requested' | 'Granted';
   size?: number;
+  content?: string; // Base64 data URL for viewing
 }

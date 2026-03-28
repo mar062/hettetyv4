@@ -574,9 +574,11 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
           } else {
             throw new Error("Empty response from AI");
           }
-        } catch (apiError) {
+        } catch (apiError: any) {
           console.error("API Error:", apiError);
-          throw apiError;
+          // Show the actual error message for debugging
+          const errorMessage = apiError?.message || String(apiError);
+          setMessages(prev => [...prev, { role: 'model', text: `Error: ${errorMessage}. Please check your API key or console.`, timestamp: new Date() }]);
         }
       } else {
         // Fallback to mock API if no API key
@@ -587,9 +589,10 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
           throw new Error("Mock API failed");
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: isRtl ? "عذراً، أواجه مشكلة في الاتصال حالياً. يرجى المحاولة مرة أخرى لاحقاً." : "I'm having trouble connecting right now. Please try again later.", timestamp: new Date() }]);
+      const errorMessage = error?.message || String(error);
+      setMessages(prev => [...prev, { role: 'model', text: `Error: ${errorMessage}`, timestamp: new Date() }]);
     }
     
     setIsLoading(false);
@@ -684,27 +687,35 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
     setAnalyzing(true);
     const newDocName = file.name;
     
-    // Call Mock API
-    const response = await api.uploadDocument(newDocName, 'Document');
-    
-    const newDoc: UserDocument = {
-        id: Math.random().toString(),
-        fileId: `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
-        name: newDocName,
-        type: file.type.includes('image') ? 'Image' : file.type.includes('pdf') ? 'PDF' : 'Document',
-        status: response.success && response.data?.isValid ? 'Verified' : 'Action Required',
-        uploadDate: new Date().toISOString().split('T')[0],
-        accessStatus: 'Granted',
-        size: file.size
-    };
+    // Read file as Data URL for preview
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const content = reader.result as string;
+      
+      // Call Mock API
+      const response = await api.uploadDocument(newDocName, 'Document');
+      
+      const newDoc: UserDocument = {
+          id: Math.random().toString(),
+          fileId: `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
+          name: newDocName,
+          type: file.type.includes('image') ? 'Image' : file.type.includes('pdf') ? 'PDF' : 'Document',
+          status: response.success && response.data?.isValid ? 'Verified' : 'Action Required',
+          uploadDate: new Date().toISOString().split('T')[0],
+          accessStatus: 'Granted',
+          size: file.size,
+          content: content
+      };
 
-    setDocs(prev => [newDoc, ...prev]);
-    setAnalyzing(false);
-    
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+      setDocs(prev => [newDoc, ...prev]);
+      setAnalyzing(false);
+      
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleRequestAccess = (id: string) => {
@@ -844,13 +855,21 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
                 <div className="max-w-full max-h-full flex flex-col items-center justify-center">
                   <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center overflow-hidden">
                     <img 
-                      src={`https://picsum.photos/seed/${viewingDoc.id}/800/600`} 
+                      src={viewingDoc.content || `https://picsum.photos/seed/${viewingDoc.id}/800/600`} 
                       alt={viewingDoc.name} 
                       className="max-w-full max-h-[60vh] object-contain rounded-lg"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                   <p className="text-sm font-medium mt-4 text-slate-600">{viewingDoc.name}</p>
+                </div>
+              ) : viewingDoc.type === 'PDF' && viewingDoc.content ? (
+                <div className="w-full h-full min-h-[600px] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <iframe 
+                    src={viewingDoc.content} 
+                    title={viewingDoc.name}
+                    className="w-full h-full min-h-[600px] border-0"
+                  />
                 </div>
               ) : (
                 <div className="bg-white w-full max-w-2xl min-h-[600px] shadow-sm border border-slate-200 rounded-xl p-12">
@@ -867,16 +886,24 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
                   </div>
                   <div className="space-y-4 text-slate-600 leading-relaxed text-sm">
                     <p className="font-semibold mb-4">{isRtl ? 'محتوى المستند:' : 'Document Content:'}</p>
-                    <p>
-                      {isRtl 
-                        ? 'هذا المستند هو نسخة إلكترونية موثقة. يحتوي على تفاصيل الاتفاقية أو الهوية أو الملكية الخاصة بك.' 
-                        : 'This document is a verified electronic copy. It contains the details of your agreement, identification, or property deed.'}
-                    </p>
-                    <p>
-                      {isRtl 
-                        ? 'تم التحقق من صحة هذا المستند وتشفيره بأمان على خوادمنا. لا يمكن لأي شخص آخر الوصول إليه بدون إذنك الصريح.' 
-                        : 'This document has been validated and securely encrypted on our servers. No one else can access it without your explicit permission.'}
-                    </p>
+                    {viewingDoc.content && viewingDoc.content.startsWith('data:text') ? (
+                      <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg whitespace-pre-wrap font-mono text-xs overflow-auto max-h-64">
+                        {atob(viewingDoc.content.split(',')[1])}
+                      </div>
+                    ) : (
+                      <>
+                        <p>
+                          {isRtl 
+                            ? 'هذا المستند هو نسخة إلكترونية موثقة. يحتوي على تفاصيل الاتفاقية أو الهوية أو الملكية الخاصة بك.' 
+                            : 'This document is a verified electronic copy. It contains the details of your agreement, identification, or property deed.'}
+                        </p>
+                        <p>
+                          {isRtl 
+                            ? 'تم التحقق من صحة هذا المستند وتشفيره بأمان على خوادمنا. لا يمكن لأي شخص آخر الوصول إليه بدون إذنك الصريح.' 
+                            : 'This document has been validated and securely encrypted on our servers. No one else can access it without your explicit permission.'}
+                        </p>
+                      </>
+                    )}
                     <div className="mt-8 p-4 bg-slate-50 border border-slate-100 rounded-lg">
                       <p className="text-xs text-slate-500 font-mono">
                         ID: {viewingDoc.fileId}<br/>
@@ -993,7 +1020,7 @@ const PropertyModal = ({ property, onClose, onPurchase, t, isRtl }: { property: 
   );
 };
 
-const ProfilePage = ({ t, isRtl, onBrowse, onLogout, userEmail }: { t: any, isRtl: boolean, onBrowse: () => void, onLogout: () => void, userEmail: string | null }) => {
+const ProfilePage = ({ t, isRtl, onBrowse, onLogout, onLogin, userEmail }: { t: any, isRtl: boolean, onBrowse: () => void, onLogout: () => void, onLogin: () => void, userEmail: string | null }) => {
   const [profile, setProfile] = useState<any>(null);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1002,7 +1029,10 @@ const ProfilePage = ({ t, isRtl, onBrowse, onLogout, userEmail }: { t: any, isRt
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
     
     const fetchProfile = async () => {
       try {
@@ -1042,7 +1072,13 @@ const ProfilePage = ({ t, isRtl, onBrowse, onLogout, userEmail }: { t: any, isRt
   };
 
   if (loading) return <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-brand-500 w-8 h-8"/></div>;
-  if (!profile) return null;
+  if (!profile) return (
+    <div className="py-20 text-center">
+      <h2 className="text-2xl font-bold text-slate-900 mb-4">{isRtl ? 'يرجى تسجيل الدخول' : 'Please Sign In'}</h2>
+      <p className="text-slate-500 mb-8">{isRtl ? 'يجب تسجيل الدخول لعرض الملف الشخصي.' : 'You must be signed in to view your profile.'}</p>
+      <Button onClick={onLogin}>{isRtl ? 'تسجيل الدخول' : 'Sign In'}</Button>
+    </div>
+  );
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-12 animate-fade-in">
@@ -1553,8 +1589,9 @@ export default function App() {
       const text = response.text;
       const ids = JSON.parse(text || "[]");
       setAiFilteredIds(ids);
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI Search Error:", err);
+      alert(`AI Search Error: ${err?.message || String(err)}. Please check your API key.`);
       // Fallback to null if error
       setAiFilteredIds(null);
     } finally {
@@ -1667,7 +1704,7 @@ export default function App() {
             {isSuperAdmin && (
               <button onClick={() => handleNav('manage-users')} className="p-2 rounded-full hover:bg-slate-100 text-brand-900 transition-colors cursor-pointer" title={isRtl ? 'إدارة المستخدمين' : 'Manage Users'}><Shield size={24} /></button>
             )}
-            <button onClick={() => handleNav('profile')} className="p-2 rounded-full hover:bg-slate-100 text-brand-900 transition-colors cursor-pointer" aria-label="Profile"><User size={24} /></button>
+            <button onClick={() => handleNav(userEmail ? 'profile' : 'login')} className="p-2 rounded-full hover:bg-slate-100 text-brand-900 transition-colors cursor-pointer" aria-label="Profile"><User size={24} /></button>
           </div>
           <button className="md:hidden cursor-pointer text-brand-900" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>{mobileMenuOpen ? <X /> : <Menu />}</button>
         </div>
@@ -1699,10 +1736,10 @@ export default function App() {
                 </button>
               )}
               <button 
-                onClick={() => { handleNav('profile'); setMobileMenuOpen(false); }} 
+                onClick={() => { handleNav(userEmail ? 'profile' : 'login'); setMobileMenuOpen(false); }} 
                 className="flex items-center gap-2 font-medium text-brand-900 hover:text-brand-600 cursor-pointer"
               >
-                <User size={20} /> {isRtl ? 'الملف الشخصي' : 'Profile'}
+                <User size={20} /> {userEmail ? (isRtl ? 'الملف الشخصي' : 'Profile') : (isRtl ? 'تسجيل الدخول' : 'Login')}
               </button>
             </div>
           </div>
@@ -1826,7 +1863,7 @@ export default function App() {
         {currentPage === 'tours' && <Tours3DPage onCta={() => handleNav('3d-experience')} t={t} isRtl={isRtl} />}
         {currentPage === '3d' && selectedPropertyId && <Viewer3D propertyId={selectedPropertyId} onClose={() => { setSelectedPropertyId(null); handleNav('listings'); }} t={t} isRtl={isRtl} />}
         {currentPage === '3d-experience' && <ComingSoon3D t={t} isRtl={isRtl} />}
-        {currentPage === 'profile' && <ProfilePage t={t} isRtl={isRtl} onBrowse={() => handleNav('listings')} onLogout={() => { setIsAdmin(false); handleNav('login'); }} userEmail={userEmail} />}
+        {currentPage === 'profile' && <ProfilePage t={t} isRtl={isRtl} onBrowse={() => handleNav('listings')} onLogout={handleLogout} onLogin={() => handleNav('login')} userEmail={userEmail} />}
         {currentPage === 'payment' && paymentProperty && (
           <PaymentPage 
             property={paymentProperty} 

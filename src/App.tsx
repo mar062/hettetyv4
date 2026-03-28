@@ -18,9 +18,10 @@ import { INITIAL_ENTITY_DATA, TRANSLATIONS } from './constants';
 import { Property, ChatMessage, UserDocument, Page } from './types';
 import { api } from './mockApi';
 import { 
-  auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
+  auth, db, storage, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
   doc, getDoc, setDoc, collection, getDocs, query, where, onSnapshot,
   addDoc, updateDoc, deleteDoc,
+  ref, uploadBytes, getDownloadURL, deleteObject,
   handleFirestoreError, OperationType
 } from './firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
@@ -510,9 +511,7 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
   // Initialize Chat
   useEffect(() => {
     try {
-      // @ts-ignore
-      // WARNING: Hardcoding the API key is for demo purposes only. It is exposed to the client.
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : '') || "AIzaSyDoIkoMMuIujo2JQdT804fSY1y5jwvVAOM";
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (apiKey) {
         const ai = new GoogleGenAI({ apiKey });
         chatRef.current = ai.chats.create({
@@ -646,7 +645,7 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
   );
 };
 
-const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
+const LegalCenter = ({ t, isRtl, userEmail }: { t: any, isRtl: boolean, userEmail: string | null }) => {
   const [docs, setDocs] = useState<UserDocument[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -655,7 +654,10 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      setDocs([]);
+      return;
+    }
 
     const q = query(
       collection(db, 'user_documents'),
@@ -673,22 +675,31 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [userEmail]);
 
   const handleUploadClick = () => {
     setError(null);
+    if (!auth.currentUser) {
+      setError(isRtl ? 'يرجى تسجيل الدخول أولاً لرفع المستندات.' : 'Please sign in first to upload documents.');
+      return;
+    }
     fileInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     const file = e.target.files?.[0];
-    if (!file || !auth.currentUser) return;
+    if (!file) return;
 
-    // Validation: Maximum file size (1MB for Firestore)
-    const MAX_SIZE = 1 * 1024 * 1024; 
+    if (!auth.currentUser) {
+      setError(isRtl ? 'يرجى تسجيل الدخول أولاً لرفع المستندات.' : 'Please sign in first to upload documents.');
+      return;
+    }
+
+    // Validation: Maximum file size (5MB using Firebase Storage)
+    const MAX_SIZE = 5 * 1024 * 1024; 
     if (file.size > MAX_SIZE) {
-      setError(isRtl ? 'حجم الملف يتجاوز الحد الأقصى (1 ميجابايت) للتخزين السحابي.' : 'File size exceeds the maximum limit (1MB) for cloud storage.');
+      setError(isRtl ? 'حجم الملف يتجاوز الحد الأقصى (5 ميجابايت).' : 'File size exceeds the maximum limit (5MB).');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -704,55 +715,70 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
     setAnalyzing(true);
     const newDocName = file.name;
     
-    // Read file as Data URL for preview
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const content = reader.result as string;
-      
-      try {
-        // Call Mock API
-        const response = await api.uploadDocument(newDocName, 'Document');
-        
-        const newDocData = {
-            fileId: `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
-            name: newDocName,
-            type: file.type.includes('image') ? 'Image' : file.type.includes('pdf') ? 'PDF' : 'Document',
-            status: response.success && response.data?.isValid ? 'Verified' : 'Action Required',
-            uploadDate: new Date().toISOString().split('T')[0],
-            accessStatus: 'Granted',
-            size: file.size,
-            content: content,
-            ownerUid: auth.currentUser!.uid
-        };
+    try {
+      // 1. Upload to Firebase Storage
+      const storagePath = `user_documents/${auth.currentUser.uid}/${Date.now()}_${file.name}`;
+      const fileRef = ref(storage, storagePath);
+      const uploadResult = await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(uploadResult.ref);
 
-        await addDoc(collection(db, 'user_documents'), newDocData);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, 'user_documents');
-      } finally {
-        setAnalyzing(false);
-        // Reset input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+      // 2. Call Mock API for analysis simulation
+      const response = await api.uploadDocument(newDocName, 'Document');
+      
+      // 3. Save metadata to Firestore
+      const newDocData = {
+          fileId: `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
+          name: newDocName,
+          type: file.type.includes('image') ? 'Image' : file.type.includes('pdf') ? 'PDF' : 'Document',
+          status: response.success && response.data?.isValid ? 'Verified' : 'Action Required',
+          uploadDate: new Date().toISOString().split('T')[0],
+          accessStatus: 'Granted',
+          size: file.size,
+          content: downloadUrl, // Store download URL instead of base64
+          ownerUid: auth.currentUser!.uid,
+          storagePath: storagePath
+      };
+
+      await addDoc(collection(db, 'user_documents'), newDocData);
+    } catch (err) {
+      setError(isRtl ? 'فشل رفع المستند. يرجى المحاولة مرة أخرى.' : 'Failed to upload document. Please try again.');
+      console.error('Upload Error:', err);
+    } finally {
+      setAnalyzing(false);
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (docData: UserDocument) => {
     if (!window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا المستند؟' : 'Are you sure you want to delete this document?')) return;
     
     try {
-      await deleteDoc(doc(db, 'user_documents', id));
+      // 1. Delete from Storage if path exists
+      if (docData.storagePath) {
+        const fileRef = ref(storage, docData.storagePath);
+        await deleteObject(fileRef).catch(err => {
+          console.warn('Storage delete failed (might not exist):', err);
+        });
+      }
+
+      // 2. Delete from Firestore
+      await deleteDoc(doc(db, 'user_documents', docData.id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `user_documents/${id}`);
+      setError(isRtl ? 'فشل حذف المستند.' : 'Failed to delete document.');
+      console.error('Delete Error:', err);
     }
   };
 
   const handleRequestAccess = (id: string) => {
-    // This would normally be a Firestore update
+    setError(null);
     updateDoc(doc(db, 'user_documents', id), { accessStatus: 'Requested' })
-      .catch(err => handleFirestoreError(err, OperationType.UPDATE, `user_documents/${id}`));
+      .catch(err => {
+        setError(isRtl ? 'فشل طلب الوصول.' : 'Failed to request access.');
+        console.error('Firestore Error:', err);
+      });
   };
 
   const formatSize = (bytes?: number) => {
@@ -838,7 +864,7 @@ const LegalCenter = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
                       <button onClick={() => setViewingDoc(doc)} className="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer">
                         {isRtl ? 'عرض' : 'View'}
                       </button>
-                      <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" title={isRtl ? 'حذف' : 'Delete'}>
+                      <button onClick={() => handleDelete(doc)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" title={isRtl ? 'حذف' : 'Delete'}>
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -1594,9 +1620,7 @@ export default function App() {
     
     setIsAiSearching(true);
     try {
-      // @ts-ignore
-      // WARNING: Hardcoding the API key is for demo purposes only. It is exposed to the client.
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : '') || "AIzaSyDoIkoMMuIujo2JQdT804fSY1y5jwvVAOM";
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (!apiKey) {
         console.warn("GEMINI_API_KEY is missing. AI search will not work.");
         setAiFilteredIds(null);
@@ -1891,7 +1915,7 @@ export default function App() {
 
         {currentPage === 'manage-users' && isSuperAdmin && <ManageUsersPage isRtl={isRtl} />}
         {currentPage === 'ai-chat' && <div className="bg-slate-100 h-full py-8"><AIChat t={t} isRtl={isRtl} properties={properties} userName={userName} /></div>}
-        {currentPage === 'legal' && <LegalCenter t={t} isRtl={isRtl} />}
+        {currentPage === 'legal' && <LegalCenter t={t} isRtl={isRtl} userEmail={userEmail} />}
         {currentPage === 'about' && <AboutPage onCta={() => handleNav('register')} t={t} isRtl={isRtl} />}
         {currentPage === 'terms' && <TermsPage t={t} isRtl={isRtl} />}
         {currentPage === 'privacy' && <PrivacyPage t={t} isRtl={isRtl} />}

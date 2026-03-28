@@ -74,6 +74,13 @@ service cloud.firestore {
              data.status in ['For Sale', 'For Rent'];
     }
 
+    function isValidUserDocument(data) {
+      return data.keys().hasAll(['name', 'ownerUid', 'content']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 255 &&
+             data.ownerUid is string &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 1048576; // 1MB limit for Firestore
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
@@ -91,6 +98,12 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidProperty(request.resource.data);
       allow update: if isAdmin() && isValidProperty(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /user_documents/{docId} {
+      allow read, delete: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.ownerUid == request.auth.uid && isValidUserDocument(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin()) && isValidUserDocument(request.resource.data);
     }
   }
 }

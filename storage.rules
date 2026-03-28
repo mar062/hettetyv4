@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Match user documents
+    match /user_documents/{userId}/{fileName} {
+      // Only the owner can read or write their own documents
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+                   // Limit file size to 5MB
+                   && request.resource.size < 5 * 1024 * 1024
+                   // Only allow specific content types (PDFs, Images)
+                   && request.resource.contentType.matches('application/pdf|image/.*');
+      allow delete: if isOwner(userId);
+    }
+    
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

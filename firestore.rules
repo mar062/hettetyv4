@@ -60,25 +60,54 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role']) &&
-             data.uid is string &&
-             data.email is string &&
-             data.role in ['user', 'admin'];
+      return data.keys().hasOnly(['uid', 'name', 'email', 'role', 'createdAt', 'phone', 'preferences']) &&
+             data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string && data.uid.size() < 100 &&
+             data.email is string && data.email.size() < 255 &&
+             data.role in ['user', 'admin'] &&
+             (!('name' in data) || (data.name is string && data.name.size() < 255)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() < 100) || data.createdAt is timestamp) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 50)) &&
+             (!('preferences' in data) || (data.preferences is string && data.preferences.size() < 10000));
     }
 
     function isValidProperty(data) {
-      return data.keys().hasAll(['title', 'price', 'location', 'status']) &&
+      return data.keys().hasOnly(['title', 'price', 'location', 'bedrooms', 'bathrooms', 'area', 'imageUrl', 'status', 'isVerified', 'paymentMethods', 'authorUid']) &&
+             data.keys().hasAll(['title', 'price', 'location', 'status']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.price is number && data.price >= 0 &&
              data.location is string && data.location.size() > 0 &&
-             data.status in ['For Sale', 'For Rent'];
+             data.status in ['For Sale', 'For Rent'] &&
+             (!('bedrooms' in data) || data.bedrooms is number) &&
+             (!('bathrooms' in data) || data.bathrooms is number) &&
+             (!('area' in data) || data.area is number) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 2000)) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('paymentMethods' in data) || (data.paymentMethods is list && data.paymentMethods.size() <= 10)) &&
+             (!('authorUid' in data) || data.authorUid is string);
     }
 
     function isValidUserDocument(data) {
-      return data.keys().hasAll(['name', 'ownerUid', 'content']) &&
+      return data.keys().hasOnly(['fileId', 'name', 'type', 'status', 'uploadDate', 'accessStatus', 'size', 'content', 'ownerUid', 'storagePath']) &&
+             data.keys().hasAll(['name', 'ownerUid', 'content']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 255 &&
              data.ownerUid is string &&
-             data.content is string && data.content.size() > 0 && data.content.size() < 1048576; // 1MB limit for Firestore
+             data.content is string && data.content.size() > 0 && data.content.size() < 1048576 &&
+             (!('fileId' in data) || (data.fileId is string && data.fileId.size() < 100)) &&
+             (!('type' in data) || (data.type is string && data.type.size() < 50)) &&
+             (!('status' in data) || (data.status is string && data.status.size() < 50)) &&
+             (!('uploadDate' in data) || (data.uploadDate is string && data.uploadDate.size() < 50)) &&
+             (!('accessStatus' in data) || (data.accessStatus is string && data.accessStatus.size() < 50)) &&
+             (!('size' in data) || data.size is number) &&
+             (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() < 1000));
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function ownerUidNotModified() {
+      return !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == resource.data.ownerUid;
     }
 
     // ===============================================================
@@ -88,9 +117,10 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
-      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin())) || 
-                    (isSuperAdmin() && isValidUser(request.resource.data));
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isSuperAdmin());
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && uidNotModified() && (request.resource.data.role == resource.data.role || isSuperAdmin())) || 
+                    (isSuperAdmin() && isValidUser(request.resource.data) && uidNotModified());
+      allow delete: if isSuperAdmin();
     }
 
     match /properties/{propertyId} {
@@ -103,7 +133,7 @@ service cloud.firestore {
     match /user_documents/{docId} {
       allow read, delete: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.ownerUid == request.auth.uid && isValidUserDocument(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin()) && isValidUserDocument(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin()) && isValidUserDocument(request.resource.data) && ownerUidNotModified();
     }
   }
 }

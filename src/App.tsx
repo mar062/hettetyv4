@@ -32,6 +32,7 @@ import PrivacyPage from './components/PrivacyPage';
 import CookiePolicyPage from './components/CookiePolicyPage';
 import CookieConsent from './components/CookieConsent';
 import PremiumHero from './components/PremiumHero';
+import imageCompression from 'browser-image-compression';
 
 // --- Components ---
 
@@ -209,6 +210,9 @@ const AuthForm = ({ type, onSwitch, onSubmit, t, isRtl }: { type: 'login' | 'reg
       
       onSubmit(user.email || '');
     } catch (err: any) {
+      // Clear loading state immediately
+      setLoading(false);
+      
       if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
         // User intentionally closed the popup or cancelled, no need to show a scary error
         setError('');
@@ -216,8 +220,6 @@ const AuthForm = ({ type, onSwitch, onSubmit, t, isRtl }: { type: 'login' | 'reg
         console.error("Google Sign In Error:", err);
         setError(err.message);
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -717,10 +719,26 @@ const LegalCenter = ({ t, isRtl, userEmail }: { t: any, isRtl: boolean, userEmai
     const newDocName = file.name;
     
     try {
+      let fileToUpload = file;
+      
+      // Compress images before uploading to improve performance
+      if (file.type.includes('image')) {
+        try {
+          const options = {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1920,
+            useWebWorker: true
+          };
+          fileToUpload = await imageCompression(file, options);
+        } catch (compressionError) {
+          console.warn("Image compression failed, uploading original:", compressionError);
+        }
+      }
+
       // 1. Upload to Firebase Storage
-      const storagePath = `user_documents/${auth.currentUser.uid}/${Date.now()}_${file.name}`;
+      const storagePath = `user_documents/${auth.currentUser.uid}/${Date.now()}_${fileToUpload.name}`;
       const fileRef = ref(storage, storagePath);
-      const uploadResult = await uploadBytes(fileRef, file);
+      const uploadResult = await uploadBytes(fileRef, fileToUpload);
       const downloadUrl = await getDownloadURL(uploadResult.ref);
 
       // 2. Call Mock API for analysis simulation
@@ -734,7 +752,7 @@ const LegalCenter = ({ t, isRtl, userEmail }: { t: any, isRtl: boolean, userEmai
           status: response.success && response.data?.isValid ? 'Verified' : 'Action Required',
           uploadDate: new Date().toISOString().split('T')[0],
           accessStatus: 'Granted',
-          size: file.size,
+          size: fileToUpload.size,
           content: downloadUrl, // Store download URL instead of base64
           ownerUid: auth.currentUser!.uid,
           storagePath: storagePath

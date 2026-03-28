@@ -511,7 +511,8 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
   // Initialize Chat
   useEffect(() => {
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      // Safely access process.env to avoid ReferenceError in Vercel browser build
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined);
       if (apiKey) {
         const ai = new GoogleGenAI({ apiKey });
         chatRef.current = ai.chats.create({
@@ -1620,7 +1621,8 @@ export default function App() {
     
     setIsAiSearching(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      // Safely access process.env to avoid ReferenceError in Vercel browser build
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined);
       if (!apiKey) {
         console.warn("GEMINI_API_KEY is missing. AI search will not work.");
         setAiFilteredIds(null);

@@ -72,7 +72,7 @@ service cloud.firestore {
     }
 
     function isValidProperty(data) {
-      return data.keys().hasOnly(['title', 'price', 'location', 'bedrooms', 'bathrooms', 'area', 'imageUrl', 'status', 'isVerified', 'paymentMethods', 'authorUid']) &&
+      return data.keys().hasOnly(['title', 'price', 'location', 'bedrooms', 'bathrooms', 'area', 'imageUrl', 'videoUrl', 'status', 'isVerified', 'verificationStatus', 'paymentMethods', 'publishDate', 'unitCode', 'legalDocs', 'authorUid']) &&
              data.keys().hasAll(['title', 'price', 'location', 'status']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.price is number && data.price >= 0 &&
@@ -82,9 +82,24 @@ service cloud.firestore {
              (!('bathrooms' in data) || data.bathrooms is number) &&
              (!('area' in data) || data.area is number) &&
              (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 2000)) &&
+             (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() < 2000)) &&
              (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('verificationStatus' in data) || data.verificationStatus in ['Pending', 'Verified', 'Rejected']) &&
              (!('paymentMethods' in data) || (data.paymentMethods is list && data.paymentMethods.size() <= 10)) &&
+             (!('publishDate' in data) || (data.publishDate is string && data.publishDate.size() < 50)) &&
+             (!('unitCode' in data) || (data.unitCode is string && data.unitCode.size() < 50)) &&
+             (!('legalDocs' in data) || (data.legalDocs is list && data.legalDocs.size() <= 10)) &&
              (!('authorUid' in data) || data.authorUid is string);
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasOnly(['userId', 'title', 'message', 'date', 'read']) &&
+             data.keys().hasAll(['userId', 'title', 'message', 'date', 'read']) &&
+             data.userId is string &&
+             data.title is string && data.title.size() < 200 &&
+             data.message is string && data.message.size() < 1000 &&
+             data.date is string && data.date.size() < 50 &&
+             data.read is bool;
     }
 
     function isValidUserDocument(data) {
@@ -134,6 +149,13 @@ service cloud.firestore {
       allow read, delete: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.ownerUid == request.auth.uid && isValidUserDocument(request.resource.data);
       allow update: if isAuthenticated() && (resource.data.ownerUid == request.auth.uid || isAdmin()) && isValidUserDocument(request.resource.data) && ownerUidNotModified();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin() && isValidNotification(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidNotification(request.resource.data) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }
 }

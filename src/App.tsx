@@ -11,7 +11,7 @@ import {
   CheckCircle, PlayCircle, Send, Upload, Clock,
   DollarSign, BedDouble, Bath, Maximize, Loader2,
   Check, FileCheck, Key, RefreshCw, LayoutTemplate,
-  User, ArrowLeft, Phone, Target, CreditCard, PlusCircle, Edit2, Save, LogOut, Shield, Trash2
+  User, ArrowLeft, Phone, Target, CreditCard, PlusCircle, Edit2, Save, LogOut, Shield, Trash2, Bell
 } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_ENTITY_DATA, TRANSLATIONS } from './constants';
@@ -108,9 +108,9 @@ const PropertyCard: React.FC<{ property: Property; onView3D: () => void; onClick
       <div className={`absolute top-4 ${isRtl ? 'right-4' : 'left-4'} bg-accent-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm`}>
         {property.status === 'For Sale' ? t.prop_forsale : t.prop_forrent}
       </div>
-      {property.isVerified && (
+      {(property.isVerified || property.verificationStatus === 'Verified') && (
         <div className={`absolute top-4 ${isRtl ? 'left-4' : 'right-4'} bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm`}>
-          <ShieldCheck size={12} /> {t.prop_verified}
+          <ShieldCheck size={12} /> {property.verificationStatus === 'Verified' ? (isRtl ? 'أصلي + ثقة وقانون' : 'Verified Legal') : t.prop_verified}
         </div>
       )}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-end">
@@ -129,6 +129,11 @@ const PropertyCard: React.FC<{ property: Property; onView3D: () => void; onClick
       <div className="flex items-center text-slate-500 text-sm mb-3">
         <MapPin size={14} className={isRtl ? "ml-1" : "mr-1"} /> {property.location}
       </div>
+      {property.unitCode && (
+        <div className="text-xs text-slate-400 mb-3 bg-slate-50 px-2 py-1 rounded inline-block w-fit">
+          {isRtl ? 'كود الوحدة:' : 'Unit Code:'} {property.unitCode}
+        </div>
+      )}
       {property.paymentMethods && property.paymentMethods.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-4">
           {property.paymentMethods.map(method => (
@@ -527,9 +532,9 @@ const AIChat = ({ t, isRtl, properties, userName }: { t: any, isRtl: boolean, pr
             ${JSON.stringify(properties.map(p => ({ id: p.id, title: p.title, price: p.price, location: p.location, type: p.status })), null, 2)}
             
             Guidelines:
-            1. Be professional, polite, and helpful.
+            1. Be professional, polite, helpful, and conversational. You can hold a normal conversation beyond just real estate if the user wants to chat.
             2. If a user asks for a property, recommend relevant ones from the list above.
-            3. Answer in the language the user uses (${isRtl ? 'Arabic' : 'English'}).
+            3. ALWAYS answer in the exact language the user is speaking to you. Do NOT restrict yourself to the website's UI language. If they speak Arabic, reply in Arabic. If they speak English, reply in English. If they speak Egyptian Arabic or Franco-Arabic, understand them and reply appropriately.
             4. If you don't know something, be honest but try to guide them to our contact page.
             5. Encourage users to book a 3D tour if they are interested in a property.`,
           }
@@ -1049,14 +1054,33 @@ const PropertyModal = ({ property, onClose, onPurchase, t, isRtl }: { property: 
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="relative h-72">
-          <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
+          {property.videoUrl ? (
+            <iframe 
+              src={property.videoUrl.replace('watch?v=', 'embed/')} 
+              className="w-full h-full object-cover" 
+              allowFullScreen
+            />
+          ) : (
+            <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
+          )}
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition cursor-pointer"><X size={20}/></button>
         </div>
         <div className="p-8">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">{property.title}</h2>
-              <p className="text-slate-500 flex items-center gap-1"><MapPin size={16}/> {property.location}</p>
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="text-2xl font-bold text-slate-900">{property.title}</h2>
+                {property.verificationStatus === 'Verified' && (
+                  <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
+                    <ShieldCheck size={14}/> {isRtl ? 'أصلي + ثقة وقانون' : 'Verified Legal'}
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-500 flex items-center gap-1 mb-1"><MapPin size={16}/> {property.location}</p>
+              <div className="flex items-center gap-4 text-sm text-slate-400">
+                {property.unitCode && <span>{isRtl ? 'كود الوحدة:' : 'Unit Code:'} {property.unitCode}</span>}
+                {property.publishDate && <span>{isRtl ? 'تاريخ النشر:' : 'Published:'} {property.publishDate}</span>}
+              </div>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-brand-600">{property.price.toLocaleString()} EGP</div>
@@ -1348,13 +1372,18 @@ const PaymentPage = ({ property, onConfirm, onCancel, t, isRtl }: { property: Pr
 
 const AddListingPage = ({ onAdd, t, isRtl }: { onAdd: (prop: Omit<Property, 'id'>) => void, t: any, isRtl: boolean }) => {
   const [formData, setFormData] = useState({
-    title: '', price: '', location: '', bedrooms: '1', bathrooms: '1', area: '', imageUrl: '', status: 'For Sale'
+    title: '', price: '', location: '', bedrooms: '1', bathrooms: '1', area: '', imageUrl: '', videoUrl: '', status: 'For Sale'
   });
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    
+    const unitCode = `HET-${Math.floor(10000 + Math.random() * 90000)}`;
+    const publishDate = new Date().toISOString().split('T')[0];
+
     await onAdd({
       title: formData.title,
       price: Number(formData.price),
@@ -1363,16 +1392,41 @@ const AddListingPage = ({ onAdd, t, isRtl }: { onAdd: (prop: Omit<Property, 'id'
       bathrooms: Number(formData.bathrooms),
       area: Number(formData.area),
       imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&q=80&w=800',
+      videoUrl: formData.videoUrl || undefined,
       status: formData.status as 'For Sale' | 'For Rent',
       isVerified: false,
-      paymentMethods: ['Cash']
+      verificationStatus: 'Pending',
+      paymentMethods: ['Cash'],
+      unitCode,
+      publishDate,
+      legalDocs: [] // In a real app, we'd upload files and get URLs
     });
+    
     setSubmitting(false);
+    setSuccessMessage(isRtl ? 'تم إضافة العقار بنجاح. أنتظر قبول عقارك في خلال 24 ساعة إلى 48 ساعة فقط.' : 'Property added successfully. Wait for your property to be accepted within 24 to 48 hours only.');
+    
+    // Reset form
+    setFormData({
+      title: '', price: '', location: '', bedrooms: '1', bathrooms: '1', area: '', imageUrl: '', videoUrl: '', status: 'For Sale'
+    });
   };
+
+  if (successMessage) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 text-center animate-fade-in">
+        <div className="bg-green-50 text-green-800 p-8 rounded-2xl border border-green-200">
+          <CheckCircle className="mx-auto h-16 w-16 mb-4 text-green-500" />
+          <h2 className="text-2xl font-bold mb-2">{isRtl ? 'تم الاستلام' : 'Received'}</h2>
+          <p className="text-lg">{successMessage}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12 animate-fade-in">
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">{isRtl ? 'إضافة عقار جديد' : 'Add New Listing'}</h1>
+      <h1 className="text-3xl font-bold text-slate-900 mb-2">{isRtl ? 'إضافة عقار جديد' : 'Add New Listing'}</h1>
+      <p className="text-slate-500 mb-8">{isRtl ? 'إضافة العقار مجانية تماماً.' : 'Adding a property is completely free.'}</p>
       <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
           <div>
@@ -1457,6 +1511,20 @@ const AddListingPage = ({ onAdd, t, isRtl }: { onAdd: (prop: Omit<Property, 'id'
               </button>
             </div>
             <p className="text-xs text-slate-500 mt-1">{isRtl ? 'يمكنك لصق رابط الصورة مباشرة هنا' : 'You can paste the image URL directly here'}</p>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">{isRtl ? 'رابط الفيديو (اختياري)' : 'Video URL (Optional)'}</label>
+            <input 
+              type="text"
+              value={formData.videoUrl} 
+              onChange={e => setFormData({...formData, videoUrl: e.target.value})} 
+              placeholder="https://youtube.com/..." 
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none" 
+            />
+          </div>
+          <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2"><Shield size={18} className="text-brand-600"/> {isRtl ? 'الأوراق القانونية' : 'Legal Documents'}</h3>
+            <p className="text-sm text-slate-500 mb-4">{isRtl ? 'سيتم طلب رفع الأوراق القانونية (أصلي + ثقة وقانون) بعد إضافة العقار المبدئية.' : 'You will be asked to upload legal documents after initially adding the property.'}</p>
           </div>
         </div>
         <Button type="submit" disabled={submitting} className="w-full py-3 text-lg">
@@ -1560,6 +1628,86 @@ const ManageUsersPage = ({ isRtl }: { isRtl: boolean }) => {
   );
 };
 
+// --- Legal Sessions Page ---
+const LegalSessionsPage = ({ t, isRtl }: { t: any, isRtl: boolean }) => {
+  const lawyers = [
+    { id: 1, name: 'أ. أحمد محمود', title: 'محامي عقاري خبير', fee: 500, image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=400' },
+    { id: 2, name: 'أ. سارة خالد', title: 'مستشار قانوني', fee: 700, image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400' },
+    { id: 3, name: 'أ. محمد طارق', title: 'محامي توثيق وتسجيل', fee: 400, image: 'https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400' }
+  ];
+
+  const [selectedLawyer, setSelectedLawyer] = useState<number | null>(null);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+
+  const handleBook = (e: React.FormEvent) => {
+    e.preventDefault();
+    setBookingSuccess(true);
+    setTimeout(() => setBookingSuccess(false), 5000);
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-12 animate-fade-in">
+      <div className="text-center mb-12">
+        <ShieldCheck className="w-16 h-16 text-brand-600 mx-auto mb-4" />
+        <h1 className="text-4xl font-bold text-slate-900 mb-4">{isRtl ? 'ثقة القانون - الجلسات القانونية' : 'Trust Law - Legal Sessions'}</h1>
+        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+          {isRtl ? 'احجز جلستك مع نخبة من المحامين المتخصصين في الشأن العقاري لضمان حقوقك وتوثيق عقودك بأمان تام.' : 'Book your session with elite real estate lawyers to ensure your rights and document your contracts safely.'}
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-8 mb-12">
+        {lawyers.map(lawyer => (
+          <div key={lawyer.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+            <img src={lawyer.image} alt={lawyer.name} className="w-full h-48 object-cover" />
+            <div className="p-6 text-center">
+              <h3 className="text-xl font-bold text-slate-900 mb-1">{lawyer.name}</h3>
+              <p className="text-brand-600 font-medium mb-4">{lawyer.title}</p>
+              <div className="bg-slate-50 rounded-lg py-3 mb-6">
+                <p className="text-sm text-slate-500 mb-1">{isRtl ? 'قيمة المقابلة' : 'Session Fee'}</p>
+                <p className="text-2xl font-bold text-slate-900">{lawyer.fee} EGP</p>
+              </div>
+              <Button onClick={() => setSelectedLawyer(lawyer.id)} className="w-full" variant={selectedLawyer === lawyer.id ? 'accent' : 'primary'}>
+                {selectedLawyer === lawyer.id ? (isRtl ? 'تم الاختيار' : 'Selected') : (isRtl ? 'اختيار المحامي' : 'Select Lawyer')}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {selectedLawyer && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm max-w-2xl mx-auto animate-slide-up">
+          <h3 className="text-2xl font-bold text-slate-900 mb-6 text-center">{isRtl ? 'تأكيد الحجز' : 'Confirm Booking'}</h3>
+          {bookingSuccess ? (
+            <div className="bg-green-50 text-green-800 p-6 rounded-xl text-center">
+              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+              <p className="font-bold text-lg">{isRtl ? 'تم تأكيد الحجز بنجاح!' : 'Booking confirmed successfully!'}</p>
+              <p className="text-sm mt-2">{isRtl ? 'سيتواصل معك المحامي قريباً لتحديد الموعد.' : 'The lawyer will contact you soon to schedule the appointment.'}</p>
+            </div>
+          ) : (
+            <form onSubmit={handleBook} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{isRtl ? 'الاسم بالكامل' : 'Full Name'}</label>
+                <input required type="text" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{isRtl ? 'رقم الهاتف' : 'Phone Number'}</label>
+                <input required type="tel" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{isRtl ? 'تفاصيل الاستشارة (اختياري)' : 'Consultation Details (Optional)'}</label>
+                <textarea rows={3} className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
+              </div>
+              <Button type="submit" className="w-full py-3 text-lg mt-4">
+                {isRtl ? 'تأكيد الحجز والدفع لاحقاً' : 'Confirm Booking & Pay Later'}
+              </Button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // --- Main App ---
 
 export default function App() {
@@ -1582,9 +1730,29 @@ export default function App() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const t = TRANSLATIONS[lang];
   const isRtl = lang === 'ar';
+
+  // Hash-based routing
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setCurrentPage(hash as Page);
+      } else {
+        setCurrentPage('home');
+      }
+    };
+
+    // Initial check on load
+    handleHashChange();
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Firebase Auth Listener
   useEffect(() => {
@@ -1611,11 +1779,28 @@ export default function App() {
           setIsAdmin(isSuper);
           setUserName(user.displayName);
         }
+
+        // Fetch notifications
+        const q = query(collection(db, 'notifications'), where('userId', '==', user.uid));
+        const unsubNotifications = onSnapshot(q, (snapshot) => {
+          const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+          setNotifications(notifs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        }, (error) => {
+          console.error('Error fetching notifications:', error);
+        });
+        
+        // Store unsub function to cleanup later if needed
+        (window as any).unsubNotifications = unsubNotifications;
+
       } else {
         setUserEmail(null);
         setUserName(null);
         setIsAdmin(false);
         setIsSuperAdmin(false);
+        setNotifications([]);
+        if ((window as any).unsubNotifications) {
+          (window as any).unsubNotifications();
+        }
       }
       setIsAuthReady(true);
     });
@@ -1750,6 +1935,7 @@ export default function App() {
   }, []);
 
   const handleNav = (page: Page) => {
+    window.location.hash = page;
     setCurrentPage(page);
     setMobileMenuOpen(false);
     window.scrollTo(0,0);
@@ -1764,6 +1950,14 @@ export default function App() {
     <button onClick={() => handleNav(page)} className={`font-medium transition-colors cursor-pointer ${currentPage === page ? 'text-accent-600' : 'text-brand-900 hover:text-brand-600'}`}>{label}</button>
   );
 
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isRtl ? 'font-cairo' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-slate-200 text-brand-900 shadow-sm">
@@ -1773,13 +1967,55 @@ export default function App() {
             <div className="hidden md:flex items-center gap-6">
               <NavLink page="home" label={t.nav_home} /><NavLink page="listings" label={t.nav_listings} />
               <button onClick={() => handleNav('3d-experience')} className={`font-medium transition-colors flex items-center gap-1 cursor-pointer ${currentPage === '3d-experience' ? 'text-accent-600' : 'text-brand-900 hover:text-brand-600'}`}><Box size={16} />{t.nav_3d_exp}</button>
-              <NavLink page="legal" label={t.nav_trust} /><NavLink page="ai-chat" label={t.nav_ai} /><NavLink page="about" label={t.footer_about} />
+              <NavLink page="legal" label={t.nav_trust} />
+              <NavLink page="legal-sessions" label={isRtl ? 'الجلسات القانونية' : 'Legal Sessions'} />
+              <NavLink page="ai-chat" label={t.nav_ai} /><NavLink page="about" label={t.footer_about} />
             </div>
           </div>
           <div className="hidden md:flex items-center gap-4">
             <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="p-2 rounded-full hover:bg-slate-100 text-brand-900 transition-colors flex items-center gap-1 cursor-pointer">
               <Globe size={20} /> <span className="text-sm font-bold uppercase">{lang === 'en' ? 'عربي' : 'EN'}</span>
             </button>
+            {userEmail && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 rounded-full hover:bg-slate-100 text-brand-900 transition-colors cursor-pointer" 
+                  aria-label="Notifications"
+                >
+                  <Bell size={24} />
+                  {notifications.filter(n => !n.read).length > 0 && (
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+                {showNotifications && (
+                  <div className={`absolute top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50 ${isRtl ? 'left-0' : 'right-0'}`}>
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                      <h3 className="font-bold text-slate-900">{isRtl ? 'الإشعارات' : 'Notifications'}</h3>
+                      <span className="text-xs bg-brand-100 text-brand-700 px-2 py-1 rounded-full font-medium">
+                        {notifications.filter(n => !n.read).length} {isRtl ? 'جديد' : 'New'}
+                      </span>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                          <p>{isRtl ? 'لا توجد إشعارات' : 'No notifications'}</p>
+                        </div>
+                      ) : (
+                        notifications.map(notif => (
+                          <div key={notif.id} className={`p-4 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.read ? 'bg-brand-50/50' : ''}`}>
+                            <h4 className="font-bold text-slate-900 text-sm mb-1">{notif.title}</h4>
+                            <p className="text-slate-600 text-sm mb-2">{notif.message}</p>
+                            <span className="text-xs text-slate-400">{new Date(notif.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {isAdmin && (
               <button onClick={() => handleNav('add-listing')} className="p-2 rounded-full hover:bg-slate-100 text-brand-900 transition-colors cursor-pointer" aria-label="Add Listing"><PlusCircle size={24} /></button>
             )}
@@ -1795,7 +2031,9 @@ export default function App() {
             <div className="flex flex-col gap-4">
               <NavLink page="home" label={t.nav_home} /><NavLink page="listings" label={t.nav_listings} />
               <button onClick={() => handleNav('3d-experience')} className={`font-medium transition-colors flex items-center gap-2 cursor-pointer ${currentPage === '3d-experience' ? 'text-accent-600' : 'text-brand-900 hover:text-brand-600'}`}><Box size={16} />{t.nav_3d_exp}</button>
-              <NavLink page="legal" label={t.nav_trust} /><NavLink page="ai-chat" label={t.nav_ai} /><NavLink page="about" label={t.footer_about} />
+              <NavLink page="legal" label={t.nav_trust} />
+              <NavLink page="legal-sessions" label={isRtl ? 'الجلسات القانونية' : 'Legal Sessions'} />
+              <NavLink page="ai-chat" label={t.nav_ai} /><NavLink page="about" label={t.footer_about} />
               <div className="flex justify-between items-center py-2 border-t border-slate-200">
                 <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="flex items-center gap-2 font-medium text-brand-900 cursor-pointer">
                     <Globe size={20} /> {lang === 'en' ? 'العربية' : 'English'}
@@ -1936,6 +2174,7 @@ export default function App() {
         {currentPage === 'manage-users' && isSuperAdmin && <ManageUsersPage isRtl={isRtl} />}
         {currentPage === 'ai-chat' && <div className="bg-slate-100 h-full py-8"><AIChat t={t} isRtl={isRtl} properties={properties} userName={userName} /></div>}
         {currentPage === 'legal' && <LegalCenter t={t} isRtl={isRtl} userEmail={userEmail} />}
+        {currentPage === 'legal-sessions' && <LegalSessionsPage t={t} isRtl={isRtl} />}
         {currentPage === 'about' && <AboutPage onCta={() => handleNav('register')} t={t} isRtl={isRtl} />}
         {currentPage === 'terms' && <TermsPage t={t} isRtl={isRtl} />}
         {currentPage === 'privacy' && <PrivacyPage t={t} isRtl={isRtl} />}
@@ -2053,7 +2292,20 @@ export default function App() {
               <li><button onClick={() => handleNav('cookie-policy')} className="hover:text-white transition-colors">{t.nav_cookie}</button></li>
             </ul>
           </div>
-          <div><h4 className="text-white font-bold mb-4">{t.footer_connect}</h4><div className="flex gap-4"><div className="w-8 h-8 bg-slate-800 rounded-full hover:bg-brand-500 cursor-pointer flex items-center justify-center text-white text-xs">F</div><div className="w-8 h-8 bg-slate-800 rounded-full hover:bg-brand-500 cursor-pointer flex items-center justify-center text-white text-xs">I</div></div></div>
+          <div>
+            <h4 className="text-white font-bold mb-4">{t.footer_connect}</h4>
+            <div className="flex gap-4">
+              <a href="https://tiktok.com" target="_blank" rel="noreferrer" className="w-8 h-8 bg-slate-800 rounded-full hover:bg-brand-500 cursor-pointer flex items-center justify-center text-white transition-colors">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>
+              </a>
+              <a href="https://instagram.com" target="_blank" rel="noreferrer" className="w-8 h-8 bg-slate-800 rounded-full hover:bg-brand-500 cursor-pointer flex items-center justify-center text-white transition-colors">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+              </a>
+              <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="w-8 h-8 bg-slate-800 rounded-full hover:bg-brand-500 cursor-pointer flex items-center justify-center text-white transition-colors">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+              </a>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

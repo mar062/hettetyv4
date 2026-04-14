@@ -1,4 +1,4 @@
-export type Page = 'home' | 'listings' | '3d-experience' | 'legal' | 'ai-chat' | 'login' | 'register' | 'contact' | '3d' | 'about' | 'buy' | 'verification' | 'tours' | 'terms' | 'privacy' | 'cookie-policy' | 'profile' | 'add-listing' | 'payment' | 'manage-users';
+export type Page = 'home' | 'listings' | '3d-experience' | 'legal' | 'ai-chat' | 'login' | 'register' | 'contact' | '3d' | 'about' | 'buy' | 'verification' | 'tours' | 'terms' | 'privacy' | 'cookie-policy' | 'profile' | 'add-listing' | 'payment' | 'manage-users' | 'legal-sessions';
 
 export interface Property {
   id: string;
@@ -9,9 +9,24 @@ export interface Property {
   bathrooms: number;
   area: number;
   imageUrl: string;
+  videoUrl?: string;
   status: 'For Sale' | 'For Rent';
   isVerified: boolean;
+  verificationStatus?: 'Pending' | 'Verified' | 'Rejected';
   paymentMethods?: string[];
+  publishDate?: string;
+  unitCode?: string;
+  legalDocs?: string[];
+  authorUid?: string;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  date: string;
+  read: boolean;
 }
 
 export interface UserProfile {

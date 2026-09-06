@@ -164,6 +164,8 @@ export function aiErrorMessage(err: any, isRtl: boolean): string {
     : 'Something went wrong reaching the AI assistant. Please try again.';
 }
 
+import { AdvisorFinancialProfile } from './types';
+
 /** Marker the AI emits when the user asks to view a property in 3D. */
 export const SHOW_3D_MARKER = '[SHOW_3D]';
 
@@ -177,3 +179,64 @@ export function extract3DMarker(text: string): { cleanText: string; show3D: bool
     propertyId: match[1] || null,
   };
 }
+
+/** Marker the AI advisor emits when extracting or updating the user's financial profile. */
+export const ADVISOR_STATE_MARKER = '[ADVISOR_STATE:';
+
+/**
+ * Extracts and parses any [ADVISOR_STATE:{...}] payload from an AI advisor message,
+ * returning the sanitized patch and clean text with the marker stripped out.
+ */
+export function extractAdvisorState(text: string): {
+  cleanText: string;
+  statePatch?: Partial<AdvisorFinancialProfile>;
+} {
+  if (!text || typeof text !== 'string') return { cleanText: text || '' };
+
+  const match = text.match(/\[ADVISOR_STATE:([\s\S]*?)\]/);
+  if (!match) return { cleanText: text };
+
+  let statePatch: Partial<AdvisorFinancialProfile> | undefined;
+  try {
+    const rawJson = match[1].trim();
+    const parsed = JSON.parse(rawJson);
+    if (parsed && typeof parsed === 'object') {
+      const patch: Partial<AdvisorFinancialProfile> = {};
+
+      if (typeof parsed.budget === 'number' && Number.isFinite(parsed.budget) && parsed.budget > 0) {
+        patch.budget = Math.round(parsed.budget);
+      }
+      if (typeof parsed.downPayment === 'number' && Number.isFinite(parsed.downPayment) && parsed.downPayment >= 0) {
+        patch.downPayment = Math.round(parsed.downPayment);
+      }
+      if (typeof parsed.monthlyCapacity === 'number' && Number.isFinite(parsed.monthlyCapacity) && parsed.monthlyCapacity >= 0) {
+        patch.monthlyCapacity = Math.round(parsed.monthlyCapacity);
+      }
+      if (parsed.currency === 'EGP' || parsed.currency === 'USD') {
+        patch.currency = parsed.currency;
+      }
+      if (['all', 'residential', 'investment', 'resale', 'coastal'].includes(parsed.purpose)) {
+        patch.purpose = parsed.purpose;
+      }
+      if (typeof parsed.preferredLocation === 'string' && parsed.preferredLocation.trim()) {
+        patch.preferredLocation = parsed.preferredLocation.trim().slice(0, 80);
+      }
+      if (typeof parsed.propertyType === 'string' && parsed.propertyType.trim()) {
+        patch.propertyType = parsed.propertyType.trim().slice(0, 50);
+      }
+      if (['all', 'ready', '1-2years', '3+years'].includes(parsed.deliveryTimeline)) {
+        patch.deliveryTimeline = parsed.deliveryTimeline;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        statePatch = patch;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to parse ADVISOR_STATE payload from AI:', err);
+  }
+
+  const cleanText = text.replace(/\[ADVISOR_STATE:[\s\S]*?\]/g, '').trim();
+  return { cleanText, statePatch };
+}
+

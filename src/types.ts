@@ -153,3 +153,32 @@ export interface UserDocument {
   ownerUid: string;
   storagePath?: string;
 }
+
+export type InvestmentPurpose = 'all' | 'residential' | 'investment' | 'resale' | 'coastal';
+
+export interface AdvisorFinancialProfile {
+  budget: number;
+  downPayment: number;
+  monthlyCapacity: number;
+  currency: 'EGP' | 'USD';
+  purpose: InvestmentPurpose;
+  preferredLocation: string;
+  propertyType: string;
+  deliveryTimeline: 'all' | 'ready' | '1-2years' | '3+years';
+}
+
+export interface AdvisorPropertyFit {
+  property: Property;
+  matchScore: number;
+  category: 'perfect' | 'stretch' | 'mismatch';
+  reasons: string[];
+  downPaymentRequired: number;
+  monthlyInstallment: number;
+  yearsOfInstallments: number;
+  estimatedAnnualRent: number;
+  rentalYieldPercent: number;
+  capitalAppreciationPercent: number;
+  totalAnnualReturnPercent: number;
+  paybackYears: number;
+}
+

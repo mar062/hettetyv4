@@ -40,6 +40,7 @@ import EmptyState from './components/EmptyState';
 import { useFocusTrap } from './hooks/useFocusTrap';
 import { lazyWithReload } from './lib/lazyWithReload';
 import { LoadErrorBoundary } from './components/LoadErrorBoundary';
+import RealEstateAdvisor from './components/RealEstateAdvisor';
 
 // Lazy-loaded so the heavy three.js bundle is only fetched when a 3D tour is opened
 const Property3DViewer = lazyWithReload(() => import('./components/Property3DViewer'), 'viewer3d');
@@ -4818,7 +4819,7 @@ export default function App() {
                 className={`font-black text-xs transition-all flex items-center gap-2 cursor-pointer px-5 py-2.5 rounded-full uppercase tracking-[0.1em] shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 ${currentPage === 'ai-chat' ? 'bg-brand-600 text-white shadow-brand-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600'}`}
               >
                 <Sparkles size={16} className="animate-pulse" aria-hidden="true" />
-                {t.nav_ai}
+                {t.advisor_nav || t.nav_ai}
               </button>
               <NavLink page="about" label={t.footer_about} />
             </div>
@@ -5019,7 +5020,7 @@ export default function App() {
               </button>
             )}
             <button onClick={() => handleNav('ai-chat')} className="w-full py-6 mt-6 bg-brand-600 text-white rounded-[2rem] font-black text-2xl uppercase tracking-widest flex items-center justify-center gap-4 shadow-2xl shadow-brand-500/40 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-brand-500">
-              <Sparkles size={24} aria-hidden="true" /> {t.nav_ai}
+              <Sparkles size={24} aria-hidden="true" /> {t.advisor_nav || t.nav_ai}
             </button>
             <button onClick={() => handleNav('about')} className="w-full py-6 text-lg font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-xl">
               {t.footer_about}
@@ -5318,7 +5319,16 @@ export default function App() {
         )}
 
         {currentPage === 'manage-users' && isAdmin && <AdminDashboard isRtl={isRtl} isSuperAdmin={isSuperAdmin} />}
-        {currentPage === 'ai-chat' && <div className="bg-slate-100 h-full py-8"><AIChat t={t} isRtl={isRtl} properties={publicProperties} userName={userName} onShow3D={open3D} /></div>}
+        {currentPage === 'ai-chat' && (
+          <RealEstateAdvisor
+            t={t}
+            isRtl={isRtl}
+            properties={publicProperties}
+            userName={userName}
+            onShow3D={open3D}
+            onOpenProperty={openProperty}
+          />
+        )}
         {currentPage === 'legal' && <LegalCenter t={t} isRtl={isRtl} userEmail={userEmail} />}
         {currentPage === 'about' && <AboutPage onCta={() => handleNav('register')} t={t} isRtl={isRtl} />}
         {currentPage === 'terms' && <TermsPage t={t} isRtl={isRtl} />}

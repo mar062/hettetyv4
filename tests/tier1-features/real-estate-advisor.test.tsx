@@ -217,6 +217,36 @@ describe('Real Estate Advisor & Financial Intelligence Engine', () => {
       fireEvent.click(tourButtons[0]);
       expect(mockShow3D).toHaveBeenCalled();
     });
+
+    it('renders 5-year wealth projection banner and exports advisory report', () => {
+      // Mock URL methods for file download
+      const mockCreateObjectURL = vi.fn().mockReturnValue('blob:mock-url');
+      const mockRevokeObjectURL = vi.fn();
+      window.URL.createObjectURL = mockCreateObjectURL;
+      window.URL.revokeObjectURL = mockRevokeObjectURL;
+
+      render(
+        <RealEstateAdvisor
+          t={TRANSLATIONS.en}
+          isRtl={false}
+          properties={MOCK_TEST_PROPERTIES}
+          userName="Tarek"
+        />
+      );
+
+      // Verify 5-Year Projection Banner exists
+      expect(screen.getByText('Projected 5-Year Wealth Accumulation')).toBeInTheDocument();
+      expect(screen.getByText('Est. Future Asset Value')).toBeInTheDocument();
+      expect(screen.getByText('Installments Financed')).toBeInTheDocument();
+
+      // Click Export Report button
+      const exportBtn = screen.getByRole('button', { name: /Export Report/i });
+      expect(exportBtn).toBeInTheDocument();
+      fireEvent.click(exportBtn);
+
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockRevokeObjectURL).toHaveBeenCalled();
+    });
   });
 
   describe('4. Full App Navigation to Real Estate Advisor', () => {
